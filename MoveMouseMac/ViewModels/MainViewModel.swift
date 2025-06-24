@@ -26,9 +26,32 @@ class MainViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     init() {
-        self.countdownValue = settings.delaySeconds
-        loadSettings()
+        // Initialize properties that don't depend on `settings` first.
+        // `settings` is already initialized with `Settings.defaultSettings` at its declaration.
+        // `countdownValue` needs `settings` so it must be initialized after `settings` is available.
+        // However, `settings` is used by `loadSettings()` which is called, and `loadSettings()`
+        // itself re-assigns `settings`.
+        // The issue is using `settings.delaySeconds` before `super.init()` is implicitly called
+        // or before all stored properties of this class are initialized.
 
+        // Step 1: Initialize `countdownValue` with a default or from the initially declared `settings`.
+        self.countdownValue = Settings.defaultSettings.delaySeconds // Or use self.settings.delaySeconds if allowed here.
+                                                                // Let's use self.settings.delaySeconds as settings is already initialized.
+        // self.countdownValue = self.settings.delaySeconds // This should be fine.
+
+        // If the error persists with self.settings.delaySeconds, it implies `settings` itself
+        // is not considered fully initialized for complex access patterns until after all other properties.
+        // A safer approach is to load settings first, then initialize dependent properties.
+
+        // Load settings first. This will assign to `self.settings`.
+        // Note: `loadSettings()` as a separate method call might be tricky if it also uses `self` implicitly
+        // before all properties are set. Let's inline or simplify.
+
+        let loadedSettings = persistenceService.loadSettings()
+        self.settings = loadedSettings // `settings` is now definitely initialized.
+        self.countdownValue = loadedSettings.delaySeconds // Initialize countdownValue based on loaded settings.
+
+        // Now, setup observers. These use `self`, so `self` must be fully initialized.
         // Update countdownValue when settings change
         $settings
             .map { $0.delaySeconds }
@@ -40,6 +63,7 @@ class MainViewModel: ObservableObject {
             .map { $0.minimiseToSystemTray }
             .sink { enabled in
                 UserDefaults.standard.set(enabled, forKey: "minimiseToSystemTrayEnabled")
+                // Also update the AppDelegate's knowledge if it's direct
             }
             .store(in: &cancellables)
 
@@ -51,14 +75,12 @@ class MainViewModel: ObservableObject {
                     self.pause()
                     self.statusMessage = "Paused (On Battery)"
                 } else if self.settings.disableOnBattery && !onBattery && !self.isRunning && self.statusMessage.contains("On Battery") {
-                    // Potentially auto-resume if was paused *because* of battery, but this needs careful state management.
-                    // For now, user has to manually restart.
                     self.statusMessage = "Paused (Plugged In)"
                 }
             }
             .store(in: &cancellables)
 
-        if settings.automaticallyStartOnLaunch {
+        if self.settings.automaticallyStartOnLaunch { // Use self.settings here
             start()
         }
 
@@ -67,9 +89,14 @@ class MainViewModel: ObservableObject {
             self?.updateNextEventDisplay()
             self?.checkSchedules() // Check schedules every second
         }
+
+        // Ensure UserDefaults for AppDelegate is set initially
+        UserDefaults.standard.set(self.settings.minimiseToSystemTray, forKey: "minimiseToSystemTrayEnabled")
     }
 
     func loadSettings() {
+        // This method is now primarily for re-loading if needed,
+        // initial load is handled in init.
         settings = persistenceService.loadSettings()
         // Update other dependent properties if needed
         self.countdownValue = settings.delaySeconds
@@ -264,7 +291,7 @@ class MainViewModel: ObservableObject {
         return false
     }
 
-    private func updateNextEventDisplay() {
+    func updateNextEventDisplay() { // Changed from private to internal (default)
         let now = Date()
         let calendar = Calendar.current
         var nextEvent: (time: Date, description: String)? = nil

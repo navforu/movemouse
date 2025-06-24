@@ -69,8 +69,14 @@ struct SettingsView: View {
                     .tag(SettingsTab.scripts)
                 AdvancedSettingsView(settings: $viewModel.settings)
                     .tag(SettingsTab.advanced)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity) // Ensure content fills space
             }
-            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never)) // Hides default page dots for TabView
+            // .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never)) // This is unavailable on macOS
+            // On macOS, TabView with a SegmentedPickerStyle for selection usually doesn't need an additional TabViewStyle
+            // If you want a specific border or background for the TabView content area:
+            .background(Color(NSColor.controlBackgroundColor)) // Example background
+            .border(Color.gray.opacity(0.3), width: 1) // Example border
+
 
             HStack {
                 Button("Cancel") {

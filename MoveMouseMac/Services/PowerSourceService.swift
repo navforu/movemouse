@@ -18,16 +18,16 @@ class PowerSourceService: ObservableObject {
 
     func checkPowerSource() {
         let snapshot = IOPSCopyPowerSourcesInfo().takeRetainedValue()
-        let sources = IOPSGetPowerSourceList(snapshot).takeRetainedValue() as [CFTypeRef]
+        let sources = IOPSCopyPowerSourcesList(snapshot).takeRetainedValue() as [CFTypeRef] // Changed here
 
         var foundBattery = false
         for ps in sources {
-            if let info = IOPSGetPowerSourceDescription(snapshot, ps).takeUnretainedValue() as? [String: Any] {
-                if let currentCapacity = info[kIOPSCurrentCapacityKey] as? Int,
-                   let isCharging = info[kIOPSIsChargingKey] as? Bool,
-                   let powerSourceState = info[kIOPSPowerSourceStateKey] as? String {
+            if let info = IOPSGetPowerSourceDescription(snapshot, ps)?.takeUnretainedValue() as? [String: Any] { // Added optional chaining
+                // kIOPSCurrentCapacityKey may not always be present, especially for AC power.
+                // let currentCapacity = info[kIOPSCurrentCapacityKey] as? Int
+                // let isCharging = info[kIOPSIsChargingKey] as? Bool
 
-                    // A power source is listed, let's see if it's a battery and if we're on it
+                if let powerSourceState = info[kIOPSPowerSourceStateKey] as? String {
                     if powerSourceState == kIOPSBatteryPowerValue {
                         foundBattery = true
                         break // Found we are on battery, no need to check others

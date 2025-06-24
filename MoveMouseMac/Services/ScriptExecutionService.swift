@@ -117,11 +117,15 @@ class ScriptExecutionService {
             """
             var error: NSDictionary?
             if let scriptObject = NSAppleScript(source: terminalScript) {
-                if scriptObject.executeAndReturnError(&error) == nil {
-                    if let err = error {
-                        print("Error telling Terminal to run script: \(err)")
-                    }
-                } else {
+                let executionResult = scriptObject.executeAndReturnError(&error)
+                // NSAppleScript.executeAndReturnError returns an NSAppleEventDescriptor on success,
+                // or nil on failure (in which case `error` is populated).
+                // The warning is because `executionResult` itself is an optional NSAppleEventDescriptor?,
+                // but if it's non-nil, the operation was successful.
+                // The original code `scriptObject.executeAndReturnError(&error) == nil` correctly checks for failure.
+                // However, the Swift compiler might be overly pedantic if the return type is perceived as non-optional in some contexts.
+                // Let's be explicit.
+                if executionResult != nil { // Success
                      print("Shell script launched in new Terminal window: \(path)")
                      return // Successfully launched in Terminal
                 }
