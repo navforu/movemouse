@@ -4,7 +4,7 @@ import CoreGraphics // For mouse control later
 import AppKit // For NSApplication activation later
 
 class MainViewModel: ObservableObject {
-    @Published var settings: Settings = Settings.defaultSettings
+    @Published var settings: Settings // Remove default init here
     @Published var isRunning: Bool = false
     @Published var countdownValue: Int // Will be set from settings.delaySeconds
     @Published var statusMessage: String = "Paused"
@@ -47,14 +47,41 @@ class MainViewModel: ObservableObject {
         // Note: `loadSettings()` as a separate method call might be tricky if it also uses `self` implicitly
         // before all properties are set. Let's inline or simplify.
 
+        // 1. Load settings into a temporary variable first.
         let loadedSettings = persistenceService.loadSettings()
-        self.settings = loadedSettings // `settings` is now definitely initialized.
-        self.countdownValue = loadedSettings.delaySeconds // Initialize countdownValue based on loaded settings.
 
-        // Now, setup observers. These use `self`, so `self` must be fully initialized.
-        // Update countdownValue when settings change
+        // 2. Initialize all stored properties.
+        self.settings = loadedSettings
+        self.countdownValue = loadedSettings.delaySeconds
+        print("MainViewModel init: Loaded settings - Delay: \(self.settings.delaySeconds), Countdown: \(self.countdownValue)") // DEBUG
+        // isRunning, statusMessage, etc., already have default values or are fine.
+        // mouseMoveTimer, scheduleCheckTimer, etc. are optional and initialized as nil.
+
+        // 3. Now that `self` is fully initialized, set up Combine subscriptions.
+        setupSubscribers()
+
+
+        if self.settings.automaticallyStartOnLaunch { // Use self.settings here
+            start()
+        }
+
+        // Periodically check for schedules and blackouts to update UI
+        scheduleCheckTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.updateNextEventDisplay()
+            self?.checkSchedules() // Check schedules every second
+        }
+
+        // Ensure UserDefaults for AppDelegate is set initially
+        UserDefaults.standard.set(self.settings.minimiseToSystemTray, forKey: "minimiseToSystemTrayEnabled")
+    }
+
+    private func setupSubscribers() {
+        // Update countdownValue when settings.delaySeconds changes
         $settings
-            .map { $0.delaySeconds }
+            .map { settings -> Int in // Explicitly show what's happening
+                print("MainViewModel $settings publisher: settings.delaySeconds is \(settings.delaySeconds)") // DEBUG
+                return settings.delaySeconds
+            }
             .assign(to: \.countdownValue, on: self)
             .store(in: &cancellables)
 
@@ -79,37 +106,34 @@ class MainViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
-
-        if self.settings.automaticallyStartOnLaunch { // Use self.settings here
-            start()
-        }
-
-        // Periodically check for schedules and blackouts to update UI
-        scheduleCheckTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            self?.updateNextEventDisplay()
-            self?.checkSchedules() // Check schedules every second
-        }
-
-        // Ensure UserDefaults for AppDelegate is set initially
-        UserDefaults.standard.set(self.settings.minimiseToSystemTray, forKey: "minimiseToSystemTrayEnabled")
     }
+
 
     func loadSettings() {
         // This method is now primarily for re-loading if needed,
         // initial load is handled in init.
-        settings = persistenceService.loadSettings()
-        // Update other dependent properties if needed
-        self.countdownValue = settings.delaySeconds
-        UserDefaults.standard.set(settings.minimiseToSystemTray, forKey: "minimiseToSystemTrayEnabled")
+        let loadedSettings = persistenceService.loadSettings()
+        self.settings = loadedSettings
+        self.countdownValue = loadedSettings.delaySeconds
+        print("MainViewModel loadSettings: Reloaded settings - Delay: \(self.settings.delaySeconds), Countdown: \(self.countdownValue)") // DEBUG
+        UserDefaults.standard.set(self.settings.minimiseToSystemTray, forKey: "minimiseToSystemTrayEnabled")
         // if settings.enableHotkey { hotkeyService.register(settings.hotkey) }
     }
 
     func saveSettings() {
+        print("MainViewModel saveSettings: Current settings before save - Delay: \(settings.delaySeconds)") // DEBUG
         persistenceService.saveSettings(settings)
         UserDefaults.standard.set(settings.minimiseToSystemTray, forKey: "minimiseToSystemTrayEnabled")
+        print("MainViewModel saveSettings: Settings should now be persisted.") // DEBUG
+        // After saving, we might want to ensure that the MainViewModel's own `settings` published
+        // property, if it was changed through a binding from SettingsView, is the source of truth
+        // for its Combine publishers. The current setup where SettingsHostView updates mainViewModel.settings
+        // should trigger the $settings publisher.
+        // No explicit reload needed here if SettingsHostView correctly updates mainViewModel.settings.
     }
 
     func start() {
+        print("MainViewModel start: Using delay \(settings.delaySeconds)") // DEBUG
         guard !isRunning else { return }
 
         if isBlackoutActive() {
@@ -126,7 +150,7 @@ class MainViewModel: ObservableObject {
 
         isRunning = true
         statusMessage = "Running..."
-        countdownValue = settings.delaySeconds
+        countdownValue = settings.delaySeconds // Explicitly set here too
 
         if settings.executeStartScript {
             scriptExecutionService.executeScript(type: .start, language: settings.scriptLanguage, path: nil, showExecution: settings.showScriptExecution)
@@ -200,8 +224,9 @@ class MainViewModel: ObservableObject {
             countdownValue -= 1
             statusMessage = "Running... \(countdownValue)s"
         } else {
+            print("MainViewModel timerTick: Performing actions with delay \(settings.delaySeconds)") // DEBUG
             performMouseActions()
-            countdownValue = settings.delaySeconds // Reset for next cycle
+            countdownValue = settings.delaySeconds
             statusMessage = "Running... \(countdownValue)s"
             if settings.executeIntervalScript {
                  scriptExecutionService.executeScript(type: .interval, language: settings.scriptLanguage, path: nil, showExecution: settings.showScriptExecution)

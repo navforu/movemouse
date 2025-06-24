@@ -36,16 +36,19 @@ class PersistenceService {
                 // Otherwise, you might need to adjust how Date is encoded/decoded in your Schedule/Blackout models.
                 // For now, we assume default Date Codable conformance is sufficient or will be adjusted.
                 let settings = try decoder.decode(Settings.self, from: data)
+                print("PersistenceService: Loaded settings - Delay: \(settings.delaySeconds)") // DEBUG
                 return settings
             }
         } catch {
             print("Error loading settings: \(error). Returning default settings.")
             // Fallthrough to return default settings if file doesn't exist or decoding fails
         }
+        print("PersistenceService: Returning default settings - Delay: \(Settings.defaultSettings.delaySeconds)") // DEBUG
         return Settings.defaultSettings
     }
 
     func saveSettings(_ settings: Settings) {
+        print("PersistenceService: Saving settings - Delay: \(settings.delaySeconds)") // DEBUG
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = .prettyPrinted // For human-readable JSON

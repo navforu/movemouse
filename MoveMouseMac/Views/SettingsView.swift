@@ -10,10 +10,13 @@ struct SettingsHostView: View {
         // from MainViewModel and can propagate changes back.
         // This approach is simple for a sheet. For more complex scenarios,
         // you might share a single Settings object or use Combine publishers.
+        // Pass a copy of mainViewModel's settings to SettingsViewModel
         let settingsViewModel = SettingsViewModel(settings: mainViewModel.settings)
 
         SettingsView(viewModel: settingsViewModel, onSave: { updatedSettings in
+            print("SettingsHostView onSave: Received updatedSettings - Delay: \(updatedSettings.delaySeconds)") // DEBUG
             mainViewModel.settings = updatedSettings // Update MainViewModel's settings
+            print("SettingsHostView onSave: mainViewModel.settings updated - Delay: \(mainViewModel.settings.delaySeconds)") // DEBUG
             mainViewModel.saveSettings() // Persist them
             mainViewModel.updateNextEventDisplay() // Refresh schedule/blackout display
             dismiss()
@@ -25,7 +28,7 @@ struct SettingsHostView: View {
 
 
 struct SettingsView: View {
-    @ObservedObject var viewModel: SettingsViewModel
+    @ObservedObject var viewModel: SettingsViewModel // This viewModel holds a COPY of the settings
     var onSave: (Settings) -> Void
     var onCancel: () -> Void
 
